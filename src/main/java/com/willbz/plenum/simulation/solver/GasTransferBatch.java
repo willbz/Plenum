@@ -8,8 +8,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.willbz.plenum.simulation.constants.GasSimulationConstants.GAS_TRANSFER_VELOCITY_IMPULSE;
-import static com.willbz.plenum.simulation.constants.GasSimulationConstants.MIN_GAS_AMOUNT;
+import static com.willbz.plenum.simulation.constants.GasSimulationConstants.*;
 
 public final class GasTransferBatch {
     private final Vec3[] directionNormals;
@@ -24,7 +23,7 @@ public final class GasTransferBatch {
     }
 
     public void add(GasTransfer transfer) {
-        if (transfer.amount() > 0.0D) {
+        if (transfer.amount() > MIN_GAS_TRANSFER_AMOUNT) {
             transfers.add(transfer);
         }
     }
@@ -36,7 +35,7 @@ public final class GasTransferBatch {
             requestedOutflow += transfer.amount();
         }
 
-        if (requestedOutflow <= 0.0D) {
+        if (requestedOutflow <= MIN_GAS_TRANSFER_AMOUNT) {
             return;
         }
 
@@ -61,7 +60,7 @@ public final class GasTransferBatch {
             long sourcePos = entry.getLongKey();
             TransferSourceState state = entry.getValue();
 
-            if (state.requestedOutflow <= 0.0D) {
+            if (state.requestedOutflow <= MIN_GAS_TRANSFER_AMOUNT) {
                 continue;
             }
 
@@ -80,13 +79,13 @@ public final class GasTransferBatch {
                 continue;
             }
 
-            if (state.requestedOutflow <= 0.0D) {
+            if (state.requestedOutflow <= MIN_GAS_TRANSFER_AMOUNT) {
                 continue;
             }
 
             double deliveredAmount = state.removedGas.amount() * (transfer.amount() / state.requestedOutflow);
 
-            if (deliveredAmount <= MIN_GAS_AMOUNT) {
+            if (deliveredAmount <= MIN_GAS_TRANSFER_AMOUNT) {
                 continue;
             }
 

@@ -4,10 +4,13 @@
   "commands.plenum.gas.info.amount": "Amount = %s",
   "commands.plenum.gas.info.temperature": "Temperature = %sC",
   "commands.plenum.gas.info.pressure": "Pressure = %s PU",
-  "commands.plenum.gas.error.not_found": "Unknown gas type: %s",
+  "commands.plenum.gas.info.velocity": "Velocity: x=%s, y=%s, z=%s",
+  "commands.plenum.gas.info.active": "Active? = %s",
+
+  "commands.plenum.gas.error.not_found": "Unknown gas type '%s'",
   "commands.plenum.gas.error.cannot_occupy": "Gas cannot occupy this position.",
   "commands.plenum.gas.add.success": "Added %s gas units of %s at %sC",
   "commands.plenum.debug_mode.show": "Gas debug mode: %s",
   "commands.plenum.debug_mode.set.success": "Gas debug mode set to %s",
-  "commands.plenum.debug_mode.error.invalid_mode": "Unknown gas debug mode: %s"
+  "commands.plenum.debug_mode.error.invalid_mode": "Unknown gas debug mode '%s'"
 }

@@ -3,14 +3,15 @@ package com.willbz.plenum.simulation.solver;
 import com.willbz.plenum.api.gas.GasStack;
 import com.willbz.plenum.api.simulation.GasCellAccess;
 import com.willbz.plenum.math.GasMath;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongList;
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +25,8 @@ public class GasFlowSimulator {
 
     public static void simulate(Level level, GasCellAccess cells, @NotNull LongList positions) {
         GasTransferBatch transfers = new GasTransferBatch(DIRECTION_NORMALS);
+        ObjectOpenHashSet<GasEdge> processedEdges = new ObjectOpenHashSet<>();
+        Long2ObjectOpenHashMap<List<GasTransfer>> outgoingBySource = new Long2ObjectOpenHashMap<>();
 
         for (long pos : positions) {
             GasStack source = cells.getGas(pos);
@@ -40,27 +43,33 @@ public class GasFlowSimulator {
 
             applyForces(cells, pos, source);
 
-            List<GasTransfer> outgoing = calculateOutgoingTransfers(level, cells, pos, source);
+            calculateOutgoingTransfers(level, cells, pos, source, processedEdges, outgoingBySource);
 
-            if (outgoing.isEmpty()) {
-                cells.dampVelocity(pos, false);
+            cells.dampVelocity(pos, false);
+        }
+
+        for (Long2ObjectOpenHashMap.Entry<List<GasTransfer>> entry : outgoingBySource.long2ObjectEntrySet()) {
+            long entrySourcePos = entry.getLongKey();
+            GasStack entrySource = cells.getGas(entrySourcePos);
+
+            if (entrySource.isEmpty()) {
                 continue;
             }
 
-            transfers.addScaled(outgoing, source.amount());
-            cells.dampVelocity(pos, false);
+            transfers.addScaled(entry.getValue(), entrySource.amount());
         }
 
         transfers.apply(cells);
     }
 
-    private static @NotNull List<GasTransfer> calculateOutgoingTransfers(
+    private static void calculateOutgoingTransfers(
             Level level,
             @NotNull GasCellAccess cells,
             long pos,
-            GasStack source
+            GasStack source,
+            ObjectOpenHashSet<GasEdge> processedEdges,
+            Long2ObjectOpenHashMap<List<GasTransfer>> outgoingBySource
     ) {
-        List<GasTransfer> outgoing = new ArrayList<>();
         Vec3 velocity = cells.getVelocity(pos);
 
         for (Direction direction : DIRECTIONS) {
@@ -68,10 +77,10 @@ public class GasFlowSimulator {
             int neighborY = BlockPos.getY(neighborPos);
 
             if (direction == Direction.UP && neighborY >= level.getMaxBuildHeight()) {
-                double transfer = calculatePressureTransfer(source, null, velocity, direction);
+                double transfer = calculateAdvectionTransfer(source, velocity, direction);
 
-                if (transfer > MIN_GAS_AMOUNT) {
-                    outgoing.add(GasTransfer.vent(pos, transfer, direction));
+                if (transfer > MIN_GAS_TRANSFER_AMOUNT) {
+                    addOutgoing(outgoingBySource, GasTransfer.vent(pos, transfer, direction));
                 }
 
                 continue;
@@ -81,85 +90,132 @@ public class GasFlowSimulator {
                 continue;
             }
 
-            GasStack target = cells.getGas(neighborPos);
+            GasEdge edge = GasEdge.of(pos, neighborPos);
 
-            if (!target.isEmpty() && !target.is(source.gas())) {
+            if (!processedEdges.add(edge)) {
                 continue;
             }
 
-            double transfer = calculatePressureTransfer(source, target, velocity, direction);
-
-            if (transfer > 0.0D) {
-                outgoing.add(GasTransfer.move(pos, neighborPos, transfer, direction));
-            }
+            calculatePairTransfer(
+                    cells,
+                    outgoingBySource,
+                    pos,
+                    neighborPos,
+                    direction,
+                    source
+            );
         }
-
-        return outgoing;
     }
 
-    private static double calculatePressureTransfer(GasStack source, @Nullable GasStack target, Vec3 velocity, Direction direction) {
-        double sourcePressure = directionalPressure(source, direction);
-        double targetPressure = 0.0D;
+    private static void calculatePairTransfer(
+            @NotNull GasCellAccess cells,
+            Long2ObjectOpenHashMap<List<GasTransfer>> outgoingBySource,
+            long firstPos,
+            long secondPos,
+            Direction firstToSecond,
+            @NotNull GasStack first
+    ) {
+        GasStack second = cells.getGas(secondPos);
 
-        if (target != null && !target.isEmpty()) {
-            targetPressure = directionalPressure(target, direction.getOpposite());
+        // TODO: Remove limitation for 1 kind of gas per cell
+        boolean canFirstMoveToSecond = second.isEmpty() || second.is(first.gas());
+        boolean canSecondMoveToFirst = first.isEmpty() || first.is(second.gas());
+
+        if (!canFirstMoveToSecond && !canSecondMoveToFirst) {
+            return;
         }
 
-        double pressureGradient = sourcePressure - targetPressure;
-        double pressureFlow = pressureGradient <= 0.0D
-                ? 0.0D
-                : pressureGradient
-                * GAS_UNITS_PER_BLOCK
-                * GAS_PRESSURE_FLOW_RATE
-                * Math.max(0.0D, source.gas().flowScale());
+        double firstToSecondTransfer = 0.0D;
 
-        double velocityFlow = calculateVelocityFlow(source, velocity, direction);
+        if (canFirstMoveToSecond) {
+            Vec3 firstVelocity = cells.getVelocity(firstPos);
+            firstToSecondTransfer = calculateTransfer(first, second, firstVelocity, firstToSecond);
+        }
 
-        return Math.max(0.0D, pressureFlow + velocityFlow);
+        double secondToFirstTransfer = 0.0D;
+
+        if (canSecondMoveToFirst) {
+            Vec3 secondVelocity = cells.getVelocity(secondPos);
+            secondToFirstTransfer = calculateTransfer(second, first, secondVelocity, firstToSecond.getOpposite());
+        }
+
+        double netTransfer = firstToSecondTransfer - secondToFirstTransfer;
+
+        if (netTransfer > MIN_GAS_TRANSFER_AMOUNT) {
+            addOutgoing(outgoingBySource, GasTransfer.move(firstPos, secondPos, netTransfer, firstToSecond));
+            return;
+        }
+
+        if (netTransfer < -MIN_GAS_TRANSFER_AMOUNT) {
+            addOutgoing(outgoingBySource, GasTransfer.move(secondPos, firstPos, -netTransfer, firstToSecond.getOpposite()));
+        }
     }
 
-    private static double calculateVelocityFlow(GasStack source, @NotNull Vec3 velocity, @NotNull Direction direction) {
-        Vec3 normal = Vec3.atLowerCornerOf(direction.getNormal());
+    private static void addOutgoing(
+            Long2ObjectOpenHashMap<List<GasTransfer>> outgoingBySource,
+            @NotNull GasTransfer transfer
+    ) {
+        if (transfer.amount() <= MIN_GAS_TRANSFER_AMOUNT) {
+            return;
+        }
+
+        outgoingBySource.computeIfAbsent(transfer.from(), ignored -> new ArrayList<>())
+                .add(transfer);
+    }
+
+    private static double calculateTransfer(
+            GasStack source,
+            GasStack target,
+            Vec3 velocity,
+            Direction direction
+    ) {
+        double advectionTransfer = calculateAdvectionTransfer(source, velocity, direction);
+        double diffusionTransfer = calculateDiffusionTransfer(source, target);
+
+        return advectionTransfer + diffusionTransfer;
+    }
+
+    private static double calculateAdvectionTransfer(
+            GasStack source,
+            @NotNull Vec3 velocity,
+            @NotNull Direction direction
+    ) {
+        Vec3 normal = DIRECTION_NORMALS[direction.ordinal()];
         double directionalVelocity = velocity.dot(normal);
 
         if (directionalVelocity <= 0.0D) {
             return 0.0D;
         }
 
-        return source.amount()
+        double rawTransfer = source.amount()
                 * directionalVelocity
+                * GAS_ADVECTION_RATE
                 * Math.max(0.0D, source.gas().flowScale());
+
+        double maxTransfer = source.amount() * MAX_GAS_ADVECTION_FRACTION;
+
+        return Math.min(rawTransfer, maxTransfer);
     }
 
-    private static double directionalPressure(@NotNull GasStack stack, @NotNull Direction direction) {
-        double pressure = GasMath.pressure(stack.amount(), stack.temperatureC());
+    private static double calculateDiffusionTransfer(
+            @NotNull GasStack source,
+            GasStack target
+    ) {
+        double targetAmount = target == null || target.isEmpty() ? 0.0D : target.amount();
+        double amountDifference = source.amount() - targetAmount;
+        double effectiveEpsilon = Math.min(GAS_DIFFUSION_EPSILON, source.amount() * 0.01D);
 
-        if (direction.getAxis() != Direction.Axis.Y) {
-            return pressure;
+        if (amountDifference <= effectiveEpsilon) {
+            return 0.0D;
         }
 
-        double concentration = GasMath.concentration(stack.amount());
+        double rawTransfer = amountDifference
+                * GAS_DIFFUSION_RATE
+                * Math.max(0.0D, source.gas().flowScale());
 
-        if (concentration <= 0.0D) {
-            return pressure;
-        }
+        double maxTransfer = source.amount() * MAX_GAS_DIFFUSION_FRACTION_PER_EDGE;
 
-        double effectiveDensity = GasMath.effectiveDensity(
-                stack.gas(),
-                stack.temperatureC(),
-                AMBIENT_TEMPERATURE_C
-        );
-
-        double lift = 1.0D - effectiveDensity;
-        double buoyancyPressure = lift
-                * stack.gas().buoyancyScale()
-                * concentration;
-
-        if (direction == Direction.UP) {
-            return pressure + buoyancyPressure;
-        }
-
-        return pressure - buoyancyPressure;
+        return Math.min(rawTransfer, maxTransfer);
     }
 
     private static void applyForces(GasCellAccess cells, long pos, @NotNull GasStack stack) {

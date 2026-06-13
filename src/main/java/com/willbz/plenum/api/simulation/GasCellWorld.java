@@ -21,6 +21,7 @@ import java.util.*;
 
 import static com.willbz.plenum.Plenum.LOGGER;
 import static com.willbz.plenum.simulation.constants.GasSimulationConstants.MIN_GAS_AMOUNT;
+import static com.willbz.plenum.simulation.constants.GasSimulationConstants.MIN_GAS_TRANSFER_AMOUNT;
 
 public class GasCellWorld implements GasCellAccess {
     private static final int SECTION_SIZE = 16;
@@ -99,6 +100,10 @@ public class GasCellWorld implements GasCellAccess {
         ).forEach(blockPos -> wakeGasAt(blockPos.asLong()));
     }
 
+    public boolean isCellActive(BlockPos pos) {
+        return activeCells.contains(pos.asLong());
+    }
+
     @Override
     public boolean canGasOccupy(Level level, long longPos) {
         int y = BlockPos.getY(longPos);
@@ -158,7 +163,7 @@ public class GasCellWorld implements GasCellAccess {
 
         double added = cell.addGas(gas);
 
-        if (added >= MIN_GAS_AMOUNT) {
+        if (added >= MIN_GAS_TRANSFER_AMOUNT) {
             wakeGasAt(pos);
 
             if (wasEmpty) {

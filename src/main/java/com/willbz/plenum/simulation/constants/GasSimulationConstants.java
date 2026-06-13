@@ -8,24 +8,31 @@ public final class GasSimulationConstants {
 
     /**
      * Minimum amount worth storing in a gas cell.
-     * Cell at or below this amount are removed from the simulation.
+     * Cells at or below this amount are removed from the simulation.
      */
     public static final double MIN_GAS_AMOUNT = 0.01D;
 
-    public static final double GAS_PRESSURE_FLOW_RATE = 0.65D;
-    public static final double GAS_MAX_PRESSURE_EQUALIZATION_FRACTION = 0.92D;
-    public static final double GAS_MIN_DIFFUSION_FLOW = 0.3D;
+    /**
+     * Minimum amount worth moving in a single transfer.
+     * This value should always be lower than MIN_GAS_AMOUNT to prevent cells becoming frozen.
+     */
+    public static final double MIN_GAS_TRANSFER_AMOUNT = 0.0001D;
 
-    public static final double GAS_BUOYANCY_DRIFT_RATE = 10.45D;
-    public static final double GAS_VELOCITY_DRIFT_RATE = 0.25D;
+    /**
+     * Differences below this value are ignored by local concentration diffusion.
+     * This value should always be lower than MIN_GAS_AMOUNT to prevent cells becoming frozen.
+     */
+    public static final double GAS_DIFFUSION_EPSILON = 0.001D;
+    public static final double GAS_DIFFUSION_RATE = 0.08D;
+
+    public static final double GAS_ADVECTION_RATE = 0.28D;
+    public static final double MAX_GAS_ADVECTION_FRACTION = 0.45D;
+    public static final double MAX_GAS_DIFFUSION_FRACTION_PER_EDGE = 0.18D;
 
     public static final double GAS_MIN_VELOCITY_SQR = 0.0001D;
     public static final double GAS_MAX_VELOCITY = 1.0D;
     public static final double GAS_VELOCITY_DAMPING = 0.78D;
     public static final double GAS_TRANSFER_VELOCITY_IMPULSE = 0.06D;
-
-    public static final double GAS_MAX_PRESSURE_TRANSFER_FRACTION = 0.35D;
-    public static final double GAS_MAX_DRIFT_TRANSFER_FRACTION = 0.25D;
 
     public static final int SIMULATION_INTERVAL_TICKS = 2;
 

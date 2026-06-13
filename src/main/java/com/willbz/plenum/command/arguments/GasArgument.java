@@ -19,7 +19,7 @@ import java.util.concurrent.CompletableFuture;
 
 public class GasArgument implements ArgumentType<ResourceLocation> {
     private static final DynamicCommandExceptionType ERROR_UNKNOWN_GAS =
-            new DynamicCommandExceptionType(id -> Component.translatable("commands.plenum.gas.error.not_found", id));
+            new DynamicCommandExceptionType(id -> Component.translatable("commands.plenum.gas.error.not_found", String.valueOf(id)));
 
     public static GasArgument gas() {
         return new GasArgument();

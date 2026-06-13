@@ -8,3 +8,5 @@ Plenum is a library mod for Minecraft that provides a dedicated implementation a
 My goal with this mod is to make a stable and efficient gas simulator that other mods can build upon, 
 whether they need gases for industrial production, environmental systems, 
 or just making the air a bit more interesting.
+
+Currently, this mod only supports 1.21.1 Neoforge.

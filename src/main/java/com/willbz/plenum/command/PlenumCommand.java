@@ -8,6 +8,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.willbz.plenum.api.gas.GasStack;
 import com.willbz.plenum.api.gas.GasType;
 import com.willbz.plenum.api.registry.PlenumRegistries;
+import com.willbz.plenum.api.simulation.GasCell;
 import com.willbz.plenum.api.simulation.GasCellWorld;
 import com.willbz.plenum.client.debug.GasDebugRenderMode;
 import com.willbz.plenum.client.debug.GasDebugRenderer;
@@ -22,6 +23,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.phys.Vec3;
 
 public class PlenumCommand {
     public static void register(final CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -95,6 +97,7 @@ public class PlenumCommand {
     private static int gasInfo(final CommandContext<CommandSourceStack> ctx, final BlockPos pos) {
         ServerLevel level = ctx.getSource().getLevel();
         GasStack gas = GasSimulationManager.get(level).getGas(pos);
+        GasCell cell = GasSimulationManager.get(level).getCell(pos);
 
         if (gas.isEmpty()) {
             ctx.getSource().sendSuccess(() -> Component.translatable("commands.plenum.gas.info.empty", pos.getX(), pos.getY(), pos.getZ()), false);
@@ -105,13 +108,19 @@ public class PlenumCommand {
                 .registryOrThrow(PlenumRegistries.GAS_TYPE)
                 .getKey(gas.gas());
 
-        ctx.getSource().sendSuccess(() -> Component.translatable("commands.plenum.gas.info.position", pos.getX(), pos.getY(), pos.getZ(), gasId),false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("commands.plenum.gas.info.position", pos.getX(), pos.getY(), pos.getZ(), String.valueOf(gasId)),false);
         ctx.getSource().sendSuccess(() -> Component.translatable("commands.plenum.gas.info.amount", gas.amount()), false);
         ctx.getSource().sendSuccess(() -> Component.translatable("commands.plenum.gas.info.temperature", gas.temperatureC()), false);
         ctx.getSource().sendSuccess(() -> {
             double pressure = GasMath.pressure(gas);
             return Component.translatable("commands.plenum.gas.info.pressure", pressure);
         }, false);
+        ctx.getSource().sendSuccess(() -> {
+            Vec3 cellVel = cell.getVelocity();
+            return Component.translatable("commands.plenum.gas.info.velocity", cellVel.x, cellVel.y, cellVel.z);
+        }, false);
+
+        ctx.getSource().sendSuccess(() -> Component.translatable("commands.plenum.gas.info.active", String.valueOf(GasSimulationManager.get(level).isCellActive(pos))), false);
 
         return 1;
     }
